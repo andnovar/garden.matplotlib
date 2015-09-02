@@ -928,15 +928,6 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
         self.canvas.cursor_instruction = None
         super(NavigationToolbar2Kivy, self).zoom(*args)
 
-    def release_zoom(self, event):
-        self.lastrect = None
-        self.canvas.canvas.remove(self.canvas.cursor_instruction)
-        super(NavigationToolbar2Kivy, self).release_zoom(event)
-
-    def release_pan(self, event):
-        self.canvas.canvas.remove(self.canvas.cursor_instruction)
-        super(NavigationToolbar2Kivy, self).release_pan(event)
-
 
 class GraphicsContextKivy(GraphicsContextBase, object):
     '''The graphics context provides the color, line styles, etc... All the
@@ -1038,6 +1029,7 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
         self.figure = figure
         self.cursor_group = InstructionGroup()
         self.cursor_instruction = None
+        self.cursor_offset = (0, 0)
         super(FigureCanvasKivy, self).__init__(figure=self.figure, **kwargs)
 
     def draw(self):
@@ -1145,13 +1137,13 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
 
         if self.toolbar.curr_cursor != 1:
             if self.cursor_instruction is None:
-                self.draw_cursor(self.toolbar.curr_cursor)
-            if self.cursor_instruction is not None:
-                self.cursor_instruction.pos = pos[0], pos[1]
+                self.draw_cursor(self.toolbar.curr_cursor, pos)
+            else:
+                self.cursor_instruction.pos = pos[0] - self.cursor_offset[0],\
+                                                pos[1] - self.cursor_offset[1]
         else:
-            if self.cursor_instruction in self.canvas.children:
-                self.canvas.remove(self.cursor_instruction)
-                self.cursor_instruction = None
+            self.canvas.after.remove(self.cursor_group)
+            self.cursor_instruction = None
 
         newcoord = self.to_widget(pos[0], pos[1], relative=True)
         x = newcoord[0]
@@ -1166,17 +1158,19 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
             self.enter_notify_event(guiEvent=None, xy=(pos[0], pos[1]))
             self.entered_figure = False
 
-    def draw_cursor(self, cursor):
-#         self.cursor_instruction.add(Image(self.toolbar.cursors[cursor]))
-#         self.cursor_instruction.add()
-        with self.canvas.after:
-            img = Image(self.toolbar.cursors[cursor])
-            Color(1, 1, 1, 1, mode='rgba')
-            size = (
-                img.texture.size[0],
-                img.texture.size[1]
-            )
-            self.cursor_instruction = Rectangle(texture=img.texture, size=size)
+    def draw_cursor(self, cursor, position):
+        self.canvas.after.remove(self.cursor_group)
+        self.cursor_group = InstructionGroup()
+        img = Image(self.toolbar.cursors[cursor])
+        self.cursor_offset = img.texture.size[0] / 2, img.texture.size[1] / 2
+        self.cursor_group.add(Color(1, 1, 1, 1, mode='rgba'))
+        size = (
+            img.texture.size[0],
+            img.texture.size[1]
+        )
+        self.cursor_instruction = Rectangle(size=size, texture=img.texture)
+        self.cursor_group.add(self.cursor_instruction)
+        self.canvas.after.add(self.cursor_group)
 
     def enter_notify_event(self, guiEvent=None, xy=None):
         event = Event('figure_enter_event', self, guiEvent)
