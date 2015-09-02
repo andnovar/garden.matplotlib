@@ -797,11 +797,26 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
         Save: Loads a Save Dialog to generate an image.
     '''
 
+    rubberband_color_ln = (1, 0, 0, 1)
+    '''Color of the line for the rectangular area defined while zooming.
+
+    :attr:`rubberband_color_ln` is a tuple and contains a list of
+    `r`, `g`, `b`, `a` values.
+    '''
+
+    rubberband_color_bg = (1, 0, 0, 0.2)
+    '''Background of the rectangular area defined while zooming.
+
+    :attr:`rubberband_color_bg` is a tuple and contains a list of
+    `r`, `g`, `b`, `a` values.
+    '''
+
     def __init__(self, canvas, **kwargs):
         self.actionbar = ActionBar(pos_hint={'top': 1.0})
-        super(NavigationToolbar2Kivy, self).__init__(canvas)
         self.rubberband_color = (1.0, 0.0, 0.0, 1.0)
         self.lastrect = None
+        self.cursors = {}
+        self.curr_cursor = 1
         self.save_dialog = Builder.load_string(textwrap.dedent('''\
             <SaveDialog>:
                 text_input: text_input
@@ -832,6 +847,7 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
                             on_release: root.save(filechooser.path,\
                             text_input.text)
             '''))
+        super(NavigationToolbar2Kivy, self).__init__(canvas)
 
     def _init_toolbar(self):
         '''A Toolbar is created with an ActionBar widget in which buttons are
@@ -859,6 +875,9 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
                 action_button = ActionButton(text=text, icon=fname)
             action_button.bind(on_press=getattr(self, callback))
             actionview.add_widget(action_button)
+        self.cursors[1] = ""
+        self.cursors[2] = os.path.join(basedir, 'hand.png')
+        self.cursors[3] = os.path.join(basedir, 'move.png')
 
     def configure_subplots(self, *largs):
         '''It will be implemented later.'''
@@ -866,6 +885,9 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
 
     def dismiss_popup(self):
         self._popup.dismiss()
+
+    def set_cursor(self, cursor):
+        self.curr_cursor = cursor
 
     def show_save(self):
         '''Displays a popup widget to perform a save operation.'''
@@ -887,20 +909,33 @@ class NavigationToolbar2Kivy(NavigationToolbar2):
         rect = [int(val)for val in (min(x0, x1) + self.canvas.x, min(y0, y1)
                         + self.canvas.y, w, h)]
         if self.lastrect is None:
-            self.canvas.canvas.add(Color(*self.rubberband_color))
+            self.canvas.canvas.add(Color(*self.rubberband_color_ln))
         else:
             self.canvas.canvas.remove(self.lastrect)
         self.lastrect = InstructionGroup()
         self.lastrect.add(Line(rectangle=rect, width=1.0, dash_length=5.0,
                 dash_offset=5.0))
-        self.lastrect.add(Color(1.0, 0.0, 0.0, 0.2))
+        self.lastrect.add(Color(*self.rubberband_color_bg))
         self.lastrect.add(Rectangle(pos=(rect[0], rect[1]),
                                     size=(rect[2], rect[3])))
         self.canvas.canvas.add(self.lastrect)
 
+    def pan(self, *args):
+        self.canvas.cursor_instruction = None
+        super(NavigationToolbar2Kivy, self).pan(*args)
+
+    def zoom(self, *args):
+        self.canvas.cursor_instruction = None
+        super(NavigationToolbar2Kivy, self).zoom(*args)
+
     def release_zoom(self, event):
         self.lastrect = None
-        return super(NavigationToolbar2Kivy, self).release_zoom(event)
+        self.canvas.canvas.remove(self.canvas.cursor_instruction)
+        super(NavigationToolbar2Kivy, self).release_zoom(event)
+
+    def release_pan(self, event):
+        self.canvas.canvas.remove(self.canvas.cursor_instruction)
+        super(NavigationToolbar2Kivy, self).release_pan(event)
 
 
 class GraphicsContextKivy(GraphicsContextBase, object):
@@ -1001,6 +1036,8 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
         self.bind(size=self._on_size_changed)
         self.entered_figure = True
         self.figure = figure
+        self.cursor_group = InstructionGroup()
+        self.cursor_instruction = None
         super(FigureCanvasKivy, self).__init__(figure=self.figure, **kwargs)
 
     def draw(self):
@@ -1105,6 +1142,17 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
            `enter_notify_event`.
         '''
         pos = args[1]
+
+        if self.toolbar.curr_cursor != 1:
+            if self.cursor_instruction is None:
+                self.draw_cursor(self.toolbar.curr_cursor)
+            if self.cursor_instruction is not None:
+                self.cursor_instruction.pos = pos[0], pos[1]
+        else:
+            if self.cursor_instruction in self.canvas.children:
+                self.canvas.remove(self.cursor_instruction)
+                self.cursor_instruction = None
+
         newcoord = self.to_widget(pos[0], pos[1], relative=True)
         x = newcoord[0]
         y = newcoord[1]
@@ -1117,6 +1165,18 @@ class FigureCanvasKivy(FocusBehavior, Widget, FigureCanvasBase):
         elif inside and self.entered_figure:
             self.enter_notify_event(guiEvent=None, xy=(pos[0], pos[1]))
             self.entered_figure = False
+
+    def draw_cursor(self, cursor):
+#         self.cursor_instruction.add(Image(self.toolbar.cursors[cursor]))
+#         self.cursor_instruction.add()
+        with self.canvas.after:
+            img = Image(self.toolbar.cursors[cursor])
+            Color(1, 1, 1, 1, mode='rgba')
+            size = (
+                img.texture.size[0],
+                img.texture.size[1]
+            )
+            self.cursor_instruction = Rectangle(texture=img.texture, size=size)
 
     def enter_notify_event(self, guiEvent=None, xy=None):
         event = Event('figure_enter_event', self, guiEvent)
