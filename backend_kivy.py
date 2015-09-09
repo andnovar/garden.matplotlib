@@ -259,6 +259,10 @@ try:
 except ImportError:
     raise ImportError("this backend requires Kivy to be installed.")
 
+# from kivy.config import Config
+# Config.set('graphics', 'show_cursor', 0)
+# Config.write()
+
 from kivy.app import App
 from kivy.graphics.texture import Texture
 from kivy.graphics import Rectangle
@@ -292,7 +296,6 @@ from kivy.uix.popup import Popup
 from kivy.properties import ObjectProperty
 from kivy.uix.textinput import TextInput
 from kivy.lang import Builder
-from kivy.logger import Logger
 from distutils.version import LooseVersion
 
 _mpl_1_5 = LooseVersion(matplotlib.__version__) >= LooseVersion('1.5.0')
